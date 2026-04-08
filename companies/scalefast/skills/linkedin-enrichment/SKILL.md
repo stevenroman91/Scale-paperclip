@@ -1,6 +1,6 @@
 ---
 name: linkedin-enrichment
-description: Waterfall enrichment APIs — Kaspr then FullEnrich, deduplication, failure cache 24h, cost tracking per provider
+description: Waterfall enrichment APIs — Kaspr then FullEnrich, deduplication, failure cache 24h, cost tracking per provider, daily limits per SDR
 slug: linkedin-enrichment
 schema: agentcompanies/v1
 tags:
@@ -8,80 +8,449 @@ tags:
   - linkedin
   - kaspr
   - fullenrich
+  - waterfall
+  - cost-tracking
 ---
 
 # LinkedIn Enrichment
 
-Skill d'enrichissement de donnees prospects par waterfall d'APIs a partir de profils LinkedIn.
+Skill d'enrichissement de donnees prospects par waterfall d'APIs a partir de profils LinkedIn. L'objectif est d'obtenir le numero de telephone direct et l'email professionnel de chaque prospect au cout le plus bas possible.
 
-## Providers
+## API Integrations
 
-| Provider | Cout/credit | Priorite | Specialite |
-|----------|-------------|----------|------------|
-| Kaspr | 0.36 EUR | 1 (premier choix) | Numeros de telephone directs, fort taux de succes en France |
-| FullEnrich | 0.49 EUR | 2 (fallback) | Couverture plus large, inclut email + telephone |
+### Kaspr (Priority 1 — cheaper)
 
-## Logique du waterfall
+- **Base URL**: `https://api.kaspr.io/v1`
+- **Authentication**: `x-api-key` header
+- **Cost**: 0.36 EUR per successful lookup
+- **Rate limit**: 100 requests/minute
+- **Speciality**: Direct phone numbers, high success rate in France
 
+#### Search by LinkedIn URL
+
+```javascript
+const axios = require('axios');
+
+async function enrichWithKaspr(linkedinUrl) {
+  try {
+    const response = await axios.post('https://api.kaspr.io/v1/search/linkedin', {
+      linkedin_url: linkedinUrl
+    }, {
+      headers: {
+        'x-api-key': process.env.KASPR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    });
+
+    const { data } = response;
+
+    if (data.phone && data.phone.length > 0) {
+      return {
+        success: true,
+        provider: 'kaspr',
+        phone: data.phone[0].number,
+        phone_type: data.phone[0].type,  // 'mobile', 'direct', 'office'
+        email: data.email || null,
+        cost: 0.36,
+        raw: data
+      };
+    }
+
+    return { success: false, provider: 'kaspr', reason: 'no_phone_found', cost: 0.36 };
+
+  } catch (error) {
+    if (error.response?.status === 429) {
+      throw new Error('KASPR_RATE_LIMIT');
+    }
+    if (error.response?.status === 402) {
+      throw new Error('KASPR_NO_CREDITS');
+    }
+    return { success: false, provider: 'kaspr', reason: error.message, cost: 0 };
+  }
+}
 ```
-Entree : URL LinkedIn du prospect
 
-1. DEDUP CHECK
-   → Rechercher dans la base existante (URL LinkedIn, email, domaine entreprise)
-   → Si deja enrichi avec succes → retourner les donnees existantes (cout = 0)
+### FullEnrich (Priority 2 — fallback)
 
-2. FAILURE CACHE CHECK
-   → Rechercher dans le cache d'echecs (cle = URL LinkedIn + provider)
-   → Si echec < 24h pour ce provider → passer au provider suivant
+- **Base URL**: `https://api.fullenrich.com/v1`
+- **Authentication**: Bearer token in `Authorization` header
+- **Cost**: 0.49 EUR per successful lookup
+- **Rate limit**: 60 requests/minute
+- **Speciality**: Broader coverage, includes email + phone
+- **Note**: Async API — returns `request_id`, requires polling
 
-3. KASPR (priorite 1)
-   → Appel API Kaspr avec l'URL LinkedIn
-   → Si succes (telephone valide retourne) :
-     - Stocker le resultat
-     - Incrementer compteur cout Kaspr (+0.36 EUR)
-     - Retourner le resultat
-   → Si echec (pas de resultat ou numero invalide) :
-     - Cacher l'echec (TTL = 24h)
-     - Passer a FullEnrich
+#### Enrich Request
 
-4. FULLENRICH (priorite 2)
-   → Appel API FullEnrich avec l'URL LinkedIn
-   → Si succes :
-     - Stocker le resultat
-     - Incrementer compteur cout FullEnrich (+0.49 EUR)
-     - Retourner le resultat
-   → Si echec :
-     - Cacher l'echec (TTL = 24h)
-     - Marquer le prospect comme "non enrichissable"
-     - Retourner echec
+```javascript
+async function enrichWithFullEnrich(linkedinUrl) {
+  // Step 1: Submit enrichment request
+  const submitResponse = await axios.post('https://api.fullenrich.com/v1/enrich', {
+    linkedin_url: linkedinUrl
+  }, {
+    headers: {
+      'Authorization': `Bearer ${process.env.FULLENRICH_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 15000
+  });
 
-Sortie : { telephone, email, provider, cout, statut }
+  const { request_id } = submitResponse.data;
+
+  // Step 2: Poll for result (max 30 seconds, poll every 2 seconds)
+  const maxAttempts = 15;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await sleep(2000);
+
+    const pollResponse = await axios.get(
+      `https://api.fullenrich.com/v1/enrich/${request_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${process.env.FULLENRICH_API_KEY}` },
+        timeout: 10000
+      }
+    );
+
+    const { status, data } = pollResponse.data;
+
+    if (status === 'completed') {
+      if (data.phone && data.phone.length > 0) {
+        return {
+          success: true,
+          provider: 'fullenrich',
+          phone: data.phone[0].number,
+          phone_type: data.phone[0].type,
+          email: data.email || null,
+          cost: 0.49,
+          raw: data
+        };
+      }
+      return { success: false, provider: 'fullenrich', reason: 'no_phone_found', cost: 0.49 };
+    }
+
+    if (status === 'failed') {
+      return { success: false, provider: 'fullenrich', reason: 'enrichment_failed', cost: 0 };
+    }
+
+    // status === 'pending' → continue polling
+  }
+
+  return { success: false, provider: 'fullenrich', reason: 'timeout_polling', cost: 0 };
+}
 ```
 
-## Cache d'echecs
+## Data Model
 
-- **Cle** : `{linkedin_url}:{provider}`
-- **TTL** : 24 heures
-- **Objectif** : eviter de depenser un credit pour un prospect qu'on sait non enrichissable par un provider donne
-- **Invalidation** : automatique apres 24h (les bases des providers sont mises a jour regulierement)
+### Table: enrichment_cache
 
-## Suivi des couts
+Stores successful enrichment results to avoid duplicate API calls.
 
-Dashboard en temps reel :
+```sql
+CREATE TABLE enrichment_cache (
+  id            SERIAL PRIMARY KEY,
+  linkedin_url  VARCHAR(500) UNIQUE NOT NULL,
+  phone         VARCHAR(30),
+  phone_type    VARCHAR(20),
+  email         VARCHAR(255),
+  provider      VARCHAR(30) NOT NULL,
+  enriched_at   TIMESTAMP DEFAULT NOW(),
+  raw_response  JSONB
+);
 
-| Metrique | Description |
-|----------|-------------|
-| Cout total Kaspr | Somme des credits consommes x 0.36 EUR |
-| Cout total FullEnrich | Somme des credits consommes x 0.49 EUR |
-| Cout total enrichissement | Kaspr + FullEnrich |
-| Cout moyen par lead enrichi | Cout total / nombre de leads enrichis avec succes |
-| Taux de succes Kaspr | Leads enrichis / tentatives Kaspr |
-| Taux de succes FullEnrich | Leads enrichis / tentatives FullEnrich |
-| Taux de succes global | Leads enrichis / total des prospects soumis |
-| Budget consomme (%) | Cout total / budget mensuel alloue |
+CREATE INDEX idx_enrichment_cache_url ON enrichment_cache(linkedin_url);
+CREATE INDEX idx_enrichment_cache_email ON enrichment_cache(email);
+```
 
-## Alertes budget
+### Table: enrichment_failures
 
-- 50% du budget → notification informative
-- 80% du budget → alerte jaune, reduire les enrichissements non prioritaires
-- 95% du budget → alerte rouge, stopper et demander validation CEO
+Stores failed lookups with TTL to avoid retrying the same provider too soon.
+
+```sql
+CREATE TABLE enrichment_failures (
+  id            SERIAL PRIMARY KEY,
+  linkedin_url  VARCHAR(500) NOT NULL,
+  provider      VARCHAR(30) NOT NULL,
+  reason        VARCHAR(255),
+  failed_at     TIMESTAMP DEFAULT NOW(),
+  expires_at    TIMESTAMP DEFAULT NOW() + INTERVAL '24 hours',
+  UNIQUE(linkedin_url, provider)
+);
+
+CREATE INDEX idx_enrichment_failures_lookup
+  ON enrichment_failures(linkedin_url, provider, expires_at);
+```
+
+### Table: enrichment_log
+
+Tracks every API call for cost reporting and auditing.
+
+```sql
+CREATE TABLE enrichment_log (
+  id            SERIAL PRIMARY KEY,
+  linkedin_url  VARCHAR(500) NOT NULL,
+  provider      VARCHAR(30) NOT NULL,
+  success       BOOLEAN NOT NULL,
+  cost_eur      DECIMAL(5,2) NOT NULL DEFAULT 0,
+  sdr_id        INTEGER REFERENCES sdr_profiles(id),
+  client_id     INTEGER REFERENCES clients(id),
+  reason        VARCHAR(255),
+  response_time_ms INTEGER,
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_enrichment_log_date ON enrichment_log(created_at);
+CREATE INDEX idx_enrichment_log_sdr ON enrichment_log(sdr_id, created_at);
+```
+
+### Table: enrichment_budgets
+
+Monthly budget allocation per client.
+
+```sql
+CREATE TABLE enrichment_budgets (
+  id            SERIAL PRIMARY KEY,
+  client_id     INTEGER REFERENCES clients(id),
+  month         DATE NOT NULL,  -- first day of month
+  budget_eur    DECIMAL(8,2) NOT NULL,
+  spent_eur     DECIMAL(8,2) DEFAULT 0,
+  UNIQUE(client_id, month)
+);
+```
+
+## Waterfall Logic (Complete)
+
+```javascript
+async function enrichProspect(linkedinUrl, sdrId, clientId) {
+  // ─── STEP 1: Deduplication Check ───
+  const cached = await db.query(
+    'SELECT * FROM enrichment_cache WHERE linkedin_url = $1',
+    [linkedinUrl]
+  );
+  if (cached.rows.length > 0) {
+    return {
+      ...cached.rows[0],
+      source: 'cache',
+      cost: 0
+    };
+  }
+
+  // ─── STEP 2: Daily Limit Check ───
+  const todayCount = await db.query(
+    `SELECT COUNT(*) FROM enrichment_log
+     WHERE sdr_id = $1 AND created_at >= CURRENT_DATE AND success = true`,
+    [sdrId]
+  );
+  const sdrRole = await getSDRRole(sdrId);
+  const dailyLimit = sdrRole === 'admin' || sdrRole === 'lead' ? Infinity : 3;
+
+  if (parseInt(todayCount.rows[0].count) >= dailyLimit) {
+    return { success: false, reason: 'daily_limit_reached', cost: 0 };
+  }
+
+  // ─── STEP 3: Budget Check ───
+  const budget = await db.query(
+    `SELECT budget_eur, spent_eur FROM enrichment_budgets
+     WHERE client_id = $1 AND month = date_trunc('month', CURRENT_DATE)`,
+    [clientId]
+  );
+  if (budget.rows.length > 0) {
+    const { budget_eur, spent_eur } = budget.rows[0];
+    if (parseFloat(spent_eur) >= parseFloat(budget_eur) * 0.95) {
+      return { success: false, reason: 'budget_exhausted', cost: 0 };
+    }
+  }
+
+  // ─── STEP 4: Try Kaspr ───
+  const kasprFailed = await db.query(
+    `SELECT 1 FROM enrichment_failures
+     WHERE linkedin_url = $1 AND provider = 'kaspr' AND expires_at > NOW()`,
+    [linkedinUrl]
+  );
+
+  let kasprResult = null;
+  if (kasprFailed.rows.length === 0) {
+    const startTime = Date.now();
+    kasprResult = await enrichWithKaspr(linkedinUrl);
+    const responseTime = Date.now() - startTime;
+
+    await logEnrichment(linkedinUrl, 'kaspr', kasprResult.success, kasprResult.cost, sdrId, clientId, kasprResult.reason, responseTime);
+
+    if (kasprResult.success) {
+      await cacheResult(linkedinUrl, kasprResult);
+      await updateBudgetSpent(clientId, kasprResult.cost);
+      return kasprResult;
+    }
+
+    await cacheFailure(linkedinUrl, 'kaspr', kasprResult.reason);
+  }
+
+  // ─── STEP 5: Try FullEnrich ───
+  const fullEnrichFailed = await db.query(
+    `SELECT 1 FROM enrichment_failures
+     WHERE linkedin_url = $1 AND provider = 'fullenrich' AND expires_at > NOW()`,
+    [linkedinUrl]
+  );
+
+  if (fullEnrichFailed.rows.length === 0) {
+    const startTime = Date.now();
+    const fullEnrichResult = await enrichWithFullEnrich(linkedinUrl);
+    const responseTime = Date.now() - startTime;
+
+    await logEnrichment(linkedinUrl, 'fullenrich', fullEnrichResult.success, fullEnrichResult.cost, sdrId, clientId, fullEnrichResult.reason, responseTime);
+
+    if (fullEnrichResult.success) {
+      await cacheResult(linkedinUrl, fullEnrichResult);
+      await updateBudgetSpent(clientId, fullEnrichResult.cost);
+      return fullEnrichResult;
+    }
+
+    await cacheFailure(linkedinUrl, 'fullenrich', fullEnrichResult.reason);
+  }
+
+  // ─── STEP 6: All Providers Failed ───
+  return {
+    success: false,
+    provider: null,
+    reason: 'no_phone_found_all_providers',
+    cost: (kasprResult?.cost || 0)
+  };
+}
+```
+
+## Helper Functions
+
+```javascript
+async function cacheResult(linkedinUrl, result) {
+  await db.query(
+    `INSERT INTO enrichment_cache (linkedin_url, phone, phone_type, email, provider)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (linkedin_url) DO UPDATE SET
+       phone = $2, phone_type = $3, email = $4, provider = $5, enriched_at = NOW()`,
+    [linkedinUrl, result.phone, result.phone_type, result.email, result.provider]
+  );
+}
+
+async function cacheFailure(linkedinUrl, provider, reason) {
+  await db.query(
+    `INSERT INTO enrichment_failures (linkedin_url, provider, reason, expires_at)
+     VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')
+     ON CONFLICT (linkedin_url, provider) DO UPDATE SET
+       reason = $3, failed_at = NOW(), expires_at = NOW() + INTERVAL '24 hours'`,
+    [linkedinUrl, provider, reason]
+  );
+}
+
+async function logEnrichment(url, provider, success, cost, sdrId, clientId, reason, responseTime) {
+  await db.query(
+    `INSERT INTO enrichment_log (linkedin_url, provider, success, cost_eur, sdr_id, client_id, reason, response_time_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [url, provider, success, cost, sdrId, clientId, reason, responseTime]
+  );
+}
+
+async function updateBudgetSpent(clientId, cost) {
+  await db.query(
+    `UPDATE enrichment_budgets SET spent_eur = spent_eur + $1
+     WHERE client_id = $2 AND month = date_trunc('month', CURRENT_DATE)`,
+    [cost, clientId]
+  );
+}
+```
+
+## Daily Limits
+
+| Role | Daily enrichment limit | Configurable |
+|------|----------------------|--------------|
+| SDR (junior/confirmed/senior) | 3 lookups per day | Yes, via `sdr_enrichment_limits` table |
+| Lead / Team Lead | Unlimited | — |
+| Admin / CEO | Unlimited | — |
+
+The limit is per SDR, not per client. It counts only successful enrichments (where an API call was made, regardless of outcome).
+
+```sql
+CREATE TABLE sdr_enrichment_limits (
+  sdr_id      INTEGER REFERENCES sdr_profiles(id) PRIMARY KEY,
+  daily_limit INTEGER NOT NULL DEFAULT 3
+);
+```
+
+## Cost Tracking Dashboard
+
+### Queries
+
+```sql
+-- Total cost by provider for current month
+SELECT
+  provider,
+  COUNT(*) AS total_calls,
+  COUNT(*) FILTER (WHERE success = true) AS successes,
+  ROUND(COUNT(*) FILTER (WHERE success = true)::decimal / NULLIF(COUNT(*), 0) * 100, 1) AS success_rate,
+  SUM(cost_eur) AS total_cost
+FROM enrichment_log
+WHERE created_at >= date_trunc('month', CURRENT_DATE)
+GROUP BY provider;
+
+-- Cost per client for current month
+SELECT
+  c.name AS client_name,
+  COUNT(*) AS lookups,
+  SUM(el.cost_eur) AS total_cost,
+  eb.budget_eur,
+  ROUND(SUM(el.cost_eur) / NULLIF(eb.budget_eur, 0) * 100, 1) AS budget_pct
+FROM enrichment_log el
+JOIN clients c ON c.id = el.client_id
+LEFT JOIN enrichment_budgets eb ON eb.client_id = el.client_id
+  AND eb.month = date_trunc('month', CURRENT_DATE)
+WHERE el.created_at >= date_trunc('month', CURRENT_DATE)
+GROUP BY c.name, eb.budget_eur;
+
+-- Average cost per successfully enriched lead
+SELECT
+  ROUND(SUM(cost_eur) / NULLIF(COUNT(*) FILTER (WHERE success = true), 0), 2) AS avg_cost_per_lead
+FROM enrichment_log
+WHERE created_at >= date_trunc('month', CURRENT_DATE);
+```
+
+## Budget Alerts
+
+| Threshold | Alert Level | Action |
+|-----------|-------------|--------|
+| 50% spent | Informative (blue) | Discord notification to Sales Ops |
+| 80% spent | Warning (yellow) | Discord alert + reduce non-priority enrichments |
+| 95% spent | Critical (red) | Discord alert to CEO + stop all enrichments for client |
+
+```javascript
+async function checkBudgetAlerts(clientId) {
+  const budget = await db.query(
+    `SELECT budget_eur, spent_eur FROM enrichment_budgets
+     WHERE client_id = $1 AND month = date_trunc('month', CURRENT_DATE)`,
+    [clientId]
+  );
+
+  if (budget.rows.length === 0) return;
+
+  const { budget_eur, spent_eur } = budget.rows[0];
+  const pct = (spent_eur / budget_eur) * 100;
+
+  if (pct >= 95) {
+    await sendDiscordAlert('critical', `Budget enrichissement a ${pct.toFixed(0)}% pour ${clientId}`);
+  } else if (pct >= 80) {
+    await sendDiscordAlert('warning', `Budget enrichissement a ${pct.toFixed(0)}% pour ${clientId}`);
+  } else if (pct >= 50) {
+    await sendDiscordAlert('info', `Budget enrichissement a ${pct.toFixed(0)}% pour ${clientId}`);
+  }
+}
+```
+
+## Cleanup Cron
+
+```sql
+-- Run daily at 02:00: clean up expired failure cache entries
+DELETE FROM enrichment_failures WHERE expires_at < NOW();
+```
+
+## Integration Points
+
+- **prospect-list-builder**: sends batches of LinkedIn URLs for enrichment after scoring
+- **sales-kpi-tracking**: enrichment costs feed into cost-per-RDV calculations
+- **client-reporting**: enrichment spend included in monthly ROI reports
+- **discord-notifications**: budget alerts sent via Discord webhooks
