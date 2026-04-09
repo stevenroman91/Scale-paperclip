@@ -8,6 +8,8 @@ includes:
   - ../../agents/pipeline-controller/AGENTS.md
   - ../../agents/anti-noshow-agent/AGENTS.md
   - ../../agents/client-portal-bot/AGENTS.md
+  - ../../agents/live-call-coach/AGENTS.md
+  - ../../skills/live-call-assistant/SKILL.md
 tags:
   - sales-ops
   - operations
@@ -23,6 +25,7 @@ L'equipe Sales Ops est le centre nerveux operationnel de ScaleFast. Elle est res
 - **Pipeline Controller** : suivi du funnel par client, reporting hebdomadaire
 - **Anti No-Show Agent** : rappels J-2 ouvres, gestion jours feries, suivi des confirmations
 - **Client Portal Bot** : chatbot self-service pour les clients de l'agence
+- **Live Call Coach** : assistance temps réel pendant les appels — détection d'objections, suggestions de réponses, email récap, invitation calendrier
 
 ## Objectifs
 

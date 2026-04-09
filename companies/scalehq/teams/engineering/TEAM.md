@@ -15,6 +15,7 @@ includes:
   - ../../skills/frontend-qa/SKILL.md
   - ../../skills/auto-bug-triage/SKILL.md
   - ../../skills/uptime-monitoring/SKILL.md
+  - ../../skills/live-call-assistant/SKILL.md
 tags:
   - engineering
 ---
