@@ -28,23 +28,14 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public 2>/dev/null || true
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
-RUN npm install prisma@6 --save-exact --omit=dev 2>/dev/null || true
+RUN npm install prisma@6 --save-exact --omit=dev
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-COPY --chown=nextjs:nodejs <<'EOF' /app/start.sh
-#!/bin/sh
-echo "[STARTUP] Running database migrations..."
-npx prisma db push --skip-generate --accept-data-loss 2>&1 || echo "[STARTUP] Migration warning"
-echo "[STARTUP] Starting Scale Group HQ..."
-exec node server.js
-EOF
-RUN chmod +x /app/start.sh
 
 USER nextjs
 
@@ -53,4 +44,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["/bin/sh", "/app/start.sh"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>&1 || true && node server.js"]
