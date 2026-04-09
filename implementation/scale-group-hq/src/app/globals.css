@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg-primary: #0a1035;
+    --color-bg-secondary: #111b52;
+    --color-bg-card: #1c2965;
+    --color-bg-hover: #22316f;
+    --color-text-primary: #e8edf5;
+    --color-text-secondary: #96a0c0;
+    --color-text-muted: #6c79a7;
+    --color-border: #2d3f82;
+    --color-accent: #2196f3;
+    --color-accent-hover: #42a5f5;
+    --color-success: #4caf50;
+    --color-warning: #ff9800;
+    --color-danger: #f44336;
+  }
+
+  body {
+    @apply bg-navy-950 text-corporate-50 antialiased;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
+  * {
+    @apply border-navy-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-navy-700 bg-navy-900 p-6 shadow-lg;
+  }
+
+  .card-header {
+    @apply mb-4 flex items-center justify-between;
+  }
+
+  .card-title {
+    @apply text-lg font-semibold text-corporate-50;
+  }
+
+  .card-value {
+    @apply text-3xl font-bold text-white;
+  }
+
+  .card-subtitle {
+    @apply text-sm text-corporate-300;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-navy-950;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-navy-600 bg-navy-800 px-4 py-2 text-sm font-medium text-corporate-200 transition-colors hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-accent-500;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-900/50 text-green-400;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-900/50 text-yellow-400;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-900/50 text-red-400;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-900/50 text-blue-400;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-corporate-300 transition-colors hover:bg-navy-800 hover:text-corporate-50;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link bg-navy-800 text-accent-400 font-medium;
+  }
+
+  .table-header {
+    @apply border-b border-navy-700 bg-navy-900 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-corporate-400;
+  }
+
+  .table-cell {
+    @apply border-b border-navy-800 px-4 py-3 text-sm text-corporate-200;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-navy-600 bg-navy-800 px-3 py-2 text-sm text-corporate-100 placeholder-corporate-500 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
+  }
+
+  .select {
+    @apply input appearance-none;
+  }
+
+  .stat-change-positive {
+    @apply text-sm text-green-400;
+  }
+
+  .stat-change-negative {
+    @apply text-sm text-red-400;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #2d3f82 #111b52;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #111b52;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #2d3f82;
+    border-radius: 3px;
+  }
+}

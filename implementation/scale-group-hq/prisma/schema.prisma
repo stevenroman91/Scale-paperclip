@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Subsidiaries ────────────────────────────────────────────────
+
+model Subsidiary {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  type           String   // e.g. "SAS", "SARL", "SCI"
+  monthlyRevenue Float    @default(0)
+  monthlyCosts   Float    @default(0)
+  headcount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  employees           Employee[]
+  recruitmentPipeline RecruitmentPipeline[]
+
+  @@map("subsidiaries")
+}
+
+// ─── Banking ─────────────────────────────────────────────────────
+
+enum BankProvider {
+  QONTO
+  REVOLUT
+}
+
+model BankAccount {
+  id          String       @id @default(cuid())
+  provider    BankProvider
+  accountName String
+  balance     Float        @default(0)
+  currency    String       @default("EUR")
+  lastSyncAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  transactions Transaction[]
+
+  @@map("bank_accounts")
+}
+
+model Transaction {
+  id            String   @id @default(cuid())
+  bankAccountId String
+  amount        Float
+  currency      String   @default("EUR")
+  description   String
+  category      String?
+  date          DateTime
+  counterparty  String?
+  createdAt     DateTime @default(now())
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id])
+
+  @@index([bankAccountId])
+  @@index([date])
+  @@map("transactions")
+}
+
+// ─── HR & Employees ──────────────────────────────────────────────
+
+enum ContractType {
+  CDI
+  CDD
+  FREELANCE
+}
+
+model Employee {
+  id            String       @id @default(cuid())
+  firstName     String
+  lastName      String
+  subsidiaryId  String
+  department    String
+  role          String
+  startDate     DateTime
+  endDate       DateTime?
+  monthlySalary Float
+  contractType  ContractType @default(CDI)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  subsidiary   Subsidiary   @relation(fields: [subsidiaryId], references: [id])
+  payrollLines PayrollLine[]
+
+  @@index([subsidiaryId])
+  @@map("employees")
+}
+
+// ─── Payroll ─────────────────────────────────────────────────────
+
+enum PayrollStatus {
+  DRAFT
+  CALCULATED
+  PAID
+}
+
+model PayrollRun {
+  id           String        @id @default(cuid())
+  month        Int
+  year         Int
+  status       PayrollStatus @default(DRAFT)
+  totalGross   Float         @default(0)
+  totalNet     Float         @default(0)
+  totalCharges Float         @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  lines PayrollLine[]
+
+  @@unique([month, year])
+  @@map("payroll_runs")
+}
+
+model PayrollLine {
+  id              String @id @default(cuid())
+  payrollRunId    String
+  employeeId      String
+  grossSalary     Float
+  netSalary       Float
+  employerCharges Float
+  employeeCharges Float
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+  @@map("payroll_lines")
+}
+
+// ─── Recruitment ─────────────────────────────────────────────────
+
+enum RecruitmentStatus {
+  SOURCING
+  SCREENING
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model RecruitmentPipeline {
+  id             String            @id @default(cuid())
+  position       String
+  subsidiaryId   String
+  status         RecruitmentStatus @default(SOURCING)
+  candidateName  String
+  candidateEmail String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  subsidiary Subsidiary @relation(fields: [subsidiaryId], references: [id])
+
+  @@index([subsidiaryId])
+  @@index([status])
+  @@map("recruitment_pipeline")
+}
+
+// ─── Marketing / Content ─────────────────────────────────────────
+
+enum ContentPlatform {
+  LINKEDIN
+}
+
+enum ContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+}
+
+model ContentCalendar {
+  id          String          @id @default(cuid())
+  title       String
+  platform    ContentPlatform @default(LINKEDIN)
+  scheduledAt DateTime?
+  status      ContentStatus   @default(DRAFT)
+  content     String
+  engagement  Json?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("content_calendar")
+}
+
+// ─── Financial Reports ───────────────────────────────────────────
+
+enum ReportType {
+  DAILY_CASH
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+model FinancialReport {
+  id        String     @id @default(cuid())
+  type      ReportType
+  period    String
+  data      Json
+  createdAt DateTime   @default(now())
+
+  @@index([type])
+  @@index([period])
+  @@map("financial_reports")
+}
