@@ -1,15 +1,10 @@
 [build]
 builder = "nixpacks"
 buildCommand = "npx prisma generate && npm run build"
-watchPatterns = ["implementation/scale-group-hq/**"]
 
 [deploy]
-startCommand = "npx prisma db push --skip-generate --accept-data-loss 2>&1; node .next/standalone/server.js"
+startCommand = "npx prisma db push --skip-generate --accept-data-loss 2>&1; PORT=${PORT:-3000} node .next/standalone/server.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-
-[service]
-internalPort = 3000
-rootDirectory = "implementation/scale-group-hq"
