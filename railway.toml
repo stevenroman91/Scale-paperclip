@@ -4,7 +4,5 @@ buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r bui
 
 [deploy]
 startCommand = "cd server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
-healthcheckPath = "/api/health"
-healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
