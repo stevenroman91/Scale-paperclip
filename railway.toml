@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build"
 
 [deploy]
-startCommand = "cd server && node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
+startCommand = "cd server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "on_failure"
