@@ -6,6 +6,7 @@ manager: trainer-agent
 includes:
   - ../../agents/curriculum-designer/AGENTS.md
   - ../../agents/ai-tutor-bot/AGENTS.md
+  - ../../agents/content-optimizer/AGENTS.md
   - ../../skills/elearning-management/SKILL.md
   - ../../skills/training-analytics/SKILL.md
   - ../../skills/call-simulation/SKILL.md
@@ -19,7 +20,8 @@ L'equipe Training est responsable de l'ensemble du cycle de formation des SDR ch
 
 - **Trainer Agent** (manager) : pilote le suivi des apprenants, les certifications et le scoring
 - **Curriculum Designer** : analyse les donnees d'appels de production pour creer de nouveaux modules
-- **AI Tutor Bot** : assure les simulations d'appels, les quiz interactifs et le feedback en temps reel
+- **AI Tutor Bot** : avatar interactif pour la pratique d'appels — joue le prospect avec des objections réalistes, scoring temps réel
+- **Content Optimizer** : amélioration continue du contenu existant basée sur les données terrain et les métriques de formation
 
 ## Missions de l'equipe
 
