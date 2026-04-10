@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build"
+buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && npm install -g @anthropic-ai/claude-code @openai/codex"
 
 [deploy]
 startCommand = "cd /app/server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
