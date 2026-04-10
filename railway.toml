@@ -3,20 +3,6 @@ builder = "nixpacks"
 buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && mkdir -p /app/bin && cd /app/bin && npm init -y && npm install @anthropic-ai/claude-code && useradd -m -s /bin/bash -u 1001 paperclip || true && mkdir -p /workspace /paperclip-home && chown -R paperclip:paperclip /app /workspace /paperclip-home"
 
 [deploy]
-startCommand = """
-export PATH=/app/bin/node_modules/.bin:$PATH
-export HOME=/paperclip-home
-
-# Configure git credentials so agents can clone/push private repos
-su -p paperclip -c "git config --global credential.helper store && git config --global user.email 'agent@paperclip.ing' && git config --global user.name 'Paperclip Agent' && echo 'https://stevenroman91:${GITHUB_TOKEN}@github.com' > /paperclip-home/.git-credentials"
-
-# Pre-clone (or pull) the main repos so agents work with real code
-su -p paperclip -c "cd /workspace && if [ -d ScaleHQ ]; then cd ScaleHQ && git pull || true; else git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/ScaleHQ.git || true; fi"
-su -p paperclip -c "cd /workspace && if [ -d scaleIQ ]; then cd scaleIQ && git pull || true; else git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/scaleIQ.git || true; fi"
-su -p paperclip -c "cd /workspace && if [ -d scalefast-devis ]; then cd scalefast-devis && git pull || true; else git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/scalefast-devis.git || true; fi"
-
-# Start Paperclip server as non-root
-cd /app/server && su -p paperclip -c "cd /app/server && HOST=0.0.0.0 HOME=/paperclip-home PATH=$PATH node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
-"""
+startCommand = "export PATH=/app/bin/node_modules/.bin:$PATH && export HOME=/paperclip-home && su -p paperclip -c \"git config --global credential.helper store && git config --global user.email agent@paperclip.ing && git config --global user.name 'Paperclip Agent' && echo https://stevenroman91:${GITHUB_TOKEN}@github.com > /paperclip-home/.git-credentials && cd /workspace && (cd ScaleHQ && git pull || git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/ScaleHQ.git) ; (cd scaleIQ && git pull || git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/scaleIQ.git) ; (cd scalefast-devis && git pull || git clone https://stevenroman91:${GITHUB_TOKEN}@github.com/stevenroman91/scalefast-devis.git) ; cd /app/server && HOST=0.0.0.0 HOME=/paperclip-home PATH=$PATH node --import ./node_modules/tsx/dist/loader.mjs dist/index.js\""
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
