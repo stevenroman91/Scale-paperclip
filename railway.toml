@@ -1,8 +1,8 @@
 [build]
 builder = "nixpacks"
-buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && mkdir -p /app/bin && cd /app/bin && npm init -y && npm install @anthropic-ai/claude-code"
+buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && mkdir -p /app/bin && cd /app/bin && npm init -y && npm install @anthropic-ai/claude-code && useradd -m -s /bin/bash -u 1001 paperclip || true && mkdir -p /workspace /paperclip-home && chown -R paperclip:paperclip /app /workspace /paperclip-home"
 
 [deploy]
-startCommand = "mkdir -p /workspace && export PATH=/app/bin/node_modules/.bin:$PATH && cd /app/server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
+startCommand = "export PATH=/app/bin/node_modules/.bin:$PATH && export HOME=/paperclip-home && cd /app/server && su paperclip -c 'export PATH=/app/bin/node_modules/.bin:$PATH && export HOME=/paperclip-home && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js'"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
