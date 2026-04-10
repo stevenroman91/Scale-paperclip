@@ -1,8 +1,8 @@
 [build]
 builder = "nixpacks"
-buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && npm install -g @anthropic-ai/claude-code @openai/codex"
+buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm -r build && mkdir -p /app/bin && cd /app/bin && npm init -y && npm install @anthropic-ai/claude-code"
 
 [deploy]
-startCommand = "mkdir -p /workspace && cd /app/server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
+startCommand = "mkdir -p /workspace && export PATH=/app/bin/node_modules/.bin:$PATH && cd /app/server && HOST=0.0.0.0 node --import ./node_modules/tsx/dist/loader.mjs dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
